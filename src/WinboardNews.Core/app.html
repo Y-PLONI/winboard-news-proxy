@@ -47,9 +47,10 @@
   .chip { color:var(--accent); }
   .t { font-weight:600; margin-top:2px; }
   .b { margin-top:2px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-  /* the first ~10 pixel rows of the first image: a thin visual hint that the item has a picture */
-  .strip { display:block; width:100%; height:10px; object-fit:cover; object-position:top; border-radius:3px; margin-top:6px; background:var(--line); }
-  #empty { color:var(--dim); padding:24px 0; text-align:center; }
+  /* the top 50 pixels of the first image: a thin visual hint that the item has a picture */
+  .strip { display:block; width:100%; height:50px; object-fit:cover; object-position:top; border-radius:3px; margin-top:6px; background:var(--line); }
+  #empty, #more { color:var(--dim); padding:16px 0; text-align:center; font-size:12px; }
+  #more[hidden] { display:none; }
 </style>
 </head>
 <body>
@@ -160,60 +161,127 @@
 
   function toggle(it) { if (selectedId === it.id && !panel.hidden) closePanel(); else openPanel(it); }
 
-  // ---- list ----
-  function render(data) {
+  // ---- list: first page + older pages loaded while scrolling down ----
+  var items = [];                 // newest first
+  var nextOffset = 0, hasMore = true, loadingMore = false, moreError = false;
+  var MAX_ITEMS = 600;
+  var moreEl = document.createElement('div');
+  moreEl.id = 'more';
+
+  function buildArticle(it) {
+    var art = document.createElement('article');
+    art.dataset.id = it.id;
+    var pm = playable(it);
+    var box;
+    if (pm.length) {
+      art.className = 'has-media'; art.tabIndex = 0; art.setAttribute('role', 'button');
+      art.addEventListener('click', function () { toggle(it); });
+      art.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(it); } });
+      box = art;
+    } else {
+      box = document.createElement('a'); box.href = SITE; box.target = '_blank'; box.rel = 'noopener'; art.appendChild(box);
+    }
+    var meta = document.createElement('div'); meta.className = 'meta';
+    var tm = document.createElement('span'); tm.textContent = when(it.time); meta.appendChild(tm);
+    if (it.breaking) { var br = document.createElement('span'); br.className = 'brk'; br.textContent = 'מבזק'; meta.appendChild(br); }
+    chips(it).forEach(function (c) { meta.appendChild(c); });
+    box.appendChild(meta);
+    if (it.title) { var t = document.createElement('div'); t.className = 't'; t.textContent = it.title; box.appendChild(t); }
+    if (it.body) { var b = document.createElement('div'); b.className = 'b'; b.textContent = it.body; box.appendChild(b); }
+    var first = pm.filter(function (m) { return m.kind === 'image'; })[0];
+    if (first) {
+      var s = document.createElement('img'); s.className = 'strip'; s.alt = ''; s.loading = 'lazy'; s.decoding = 'async';
+      s.addEventListener('error', function () { s.remove(); });
+      s.src = first.url; box.appendChild(s);
+    }
+    return art;
+  }
+
+  function updateMore() {
+    moreEl.textContent = '';
+    moreEl.hidden = !items.length;
+    if (loadingMore) {
+      moreEl.textContent = 'טוען חדשות קודמות...';
+    } else if (moreError) {
+      var btn = document.createElement('button'); btn.type = 'button'; btn.textContent = 'הטעינה נכשלה, נסה שוב';
+      btn.addEventListener('click', function () { moreError = false; loadMore(); });
+      moreEl.appendChild(btn);
+    } else if (!hasMore) {
+      moreEl.textContent = 'אין חדשות קודמות נוספות';
+    }
+  }
+
+  function renderAll() {
     var scroll = list.scrollTop;
     list.textContent = '';
-    if (!data.items.length) {
+    if (!items.length) {
       var e = document.createElement('div'); e.id = 'empty'; e.textContent = 'אין חדשות להצגה כרגע'; list.appendChild(e);
     }
-    data.items.forEach(function (it) {
-      var art = document.createElement('article');
-      art.dataset.id = it.id;
-      var pm = playable(it);
-      var box;
-      if (pm.length) {
-        art.className = 'has-media'; art.tabIndex = 0; art.setAttribute('role', 'button');
-        art.addEventListener('click', function () { toggle(it); });
-        art.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(it); } });
-        box = art;
-      } else {
-        box = document.createElement('a'); box.href = SITE; box.target = '_blank'; box.rel = 'noopener'; art.appendChild(box);
-      }
-      var meta = document.createElement('div'); meta.className = 'meta';
-      var tm = document.createElement('span'); tm.textContent = when(it.time); meta.appendChild(tm);
-      if (it.breaking) { var br = document.createElement('span'); br.className = 'brk'; br.textContent = 'מבזק'; meta.appendChild(br); }
-      chips(it).forEach(function (c) { meta.appendChild(c); });
-      box.appendChild(meta);
-      if (it.title) { var t = document.createElement('div'); t.className = 't'; t.textContent = it.title; box.appendChild(t); }
-      if (it.body) { var b = document.createElement('div'); b.className = 'b'; b.textContent = it.body; box.appendChild(b); }
-      var first = pm.filter(function (m) { return m.kind === 'image'; })[0];
-      if (first) {
-        var s = document.createElement('img'); s.className = 'strip'; s.alt = ''; s.loading = 'lazy'; s.decoding = 'async';
-        s.addEventListener('error', function () { s.remove(); });
-        s.src = first.url; box.appendChild(s);
-      }
-      list.appendChild(art);
-    });
+    items.forEach(function (it) { list.appendChild(buildArticle(it)); });
+    list.appendChild(moreEl);
+    updateMore();
     list.scrollTop = scroll;
     markSelected();
-    upd.className = data.stale ? 'stale' : '';
-    upd.textContent = (data.stale ? 'לא עדכני · ' : 'עודכן ') + (data.fetchedAt ? timeFmt.format(new Date(data.fetchedAt)) : '');
+  }
+
+  // Refresh replaces the newest page and keeps already-loaded older items that are older than it.
+  function mergeFirst(d) {
+    var ids = {};
+    d.items.forEach(function (i) { ids[i.id] = 1; });
+    var cutoff = d.items.length ? d.items[d.items.length - 1].time : Infinity;
+    var older = items.filter(function (i) { return !ids[i.id] && i.time <= cutoff; });
+    items = d.items.concat(older);
+    if (!older.length) { nextOffset = d.next; hasMore = d.hasMore; moreError = false; }
+  }
+
+  function setStatus(d) {
+    upd.className = d.stale ? 'stale' : '';
+    upd.textContent = (d.stale ? 'לא עדכני · ' : 'עודכן ') + (d.fetchedAt ? timeFmt.format(new Date(d.fetchedAt)) : '');
+  }
+
+  function fetchPage(url) {
+    return fetch(url, { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (d) {
+        if (versioned && d.v && d.v !== VERSION) { location.reload(); return new Promise(function () {}); }   // page was updated on the server
+        return d;
+      });
   }
 
   var busy = false;
   function load(manual) {
     if (busy) return; busy = true;
-    fetch(manual === true ? '/news.json?fresh=1' : '/news.json', { cache: 'no-store' })
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function (d) {
-        if (versioned && d.v && d.v !== VERSION) { location.reload(); return; }   // page was updated on the server
-        render(d);
-      })
+    fetchPage(manual === true ? '/news.json?fresh=1' : '/news.json')
+      .then(function (d) { mergeFirst(d); renderAll(); setStatus(d); fillIfShort(); })
       .catch(function (e) { upd.className = 'stale'; upd.textContent = 'שגיאת טעינה'; diag({ loadError: String(e) }); })
       .then(function () { busy = false; });
   }
 
+  function loadMore() {
+    if (loadingMore || !hasMore || moreError || !items.length) return;
+    if (items.length >= MAX_ITEMS) { hasMore = false; updateMore(); return; }
+    loadingMore = true; updateMore();
+    fetchPage('/news.json?offset=' + nextOffset)
+      .then(function (d) {
+        if (d.stale && !d.items.length) throw new Error(d.error || 'unavailable');
+        var have = {};
+        items.forEach(function (i) { have[i.id] = 1; });
+        d.items.filter(function (i) { return !have[i.id]; }).forEach(function (it) {
+          items.push(it);
+          list.insertBefore(buildArticle(it), moreEl);
+        });
+        nextOffset = d.next; hasMore = d.hasMore;
+        loadingMore = false; updateMore(); markSelected(); fillIfShort();
+      })
+      .catch(function (e) { loadingMore = false; moreError = true; updateMore(); diag({ loadMoreError: String(e) }); });
+  }
+
+  function nearBottom() { return list.scrollHeight - list.scrollTop - list.clientHeight < 600; }
+  function fillIfShort() { if (nearBottom()) loadMore(); }   // also covers tall windows where the list does not scroll yet
+
+  list.addEventListener('scroll', function () { if (nearBottom()) loadMore(); }, { passive: true });
+  window.addEventListener('resize', fillIfShort);
+  setInterval(function () { if (!document.hidden) fillIfShort(); }, 1500);   // safety net when a scroll event is missed
   document.getElementById('refresh').addEventListener('click', function () { load(true); });
   document.getElementById('pclose').addEventListener('click', closePanel);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) closePanel(); });

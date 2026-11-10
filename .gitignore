@@ -1,6 +1,9 @@
-node_modules/
-certs/
-logs/
+bin/
+obj/
+artifacts/
+.vs/
+*.user
+TestResults/
 *.pfx
 *.cer
 *.bak

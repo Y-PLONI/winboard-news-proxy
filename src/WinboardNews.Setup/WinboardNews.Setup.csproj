@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>   <!-- no console window; a successful install shows nothing at all -->
+    <AssemblyName>WinboardNews-Setup</AssemblyName>
+    <RootNamespace>WinboardNews.Setup</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>   <!-- requireAdministrator: one UAC prompt -->
+    <PublishAot>true</PublishAot>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <StripSymbols>true</StripSymbols>
+    <DebugType>none</DebugType>
+    <!-- Path of the published server exe to embed; CI passes it with -p:ServerExe=... -->
+    <ServerExe Condition="'$(ServerExe)' == ''">$(MSBuildThisFileDirectory)..\WinboardNews\bin\Release\net10.0\win-x64\publish\WinboardNews.exe</ServerExe>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\WinboardNews.Core\WinboardNews.Core.csproj" />
+    <EmbeddedResource Include="$(ServerExe)" LogicalName="WinboardNews.exe" />
+  </ItemGroup>
+</Project>

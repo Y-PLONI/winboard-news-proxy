@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>   <!-- required by the LibraryImport source generator -->
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="app.html" LogicalName="app.html" />
+    <InternalsVisibleTo Include="WinboardNews.Tests" />
+  </ItemGroup>
+</Project>
