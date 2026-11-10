@@ -8,7 +8,7 @@ $hosts = Get-Content (Join-Path $env:SystemRoot 'System32\drivers\etc\hosts') -E
 "hosts entry     : " + [bool]($hosts | Where-Object { $_ -match '^127\.0\.0\.1\s+windows\.msn\.com\s' -and $_ -match [regex]::Escape($marker) })
 "cert trusted    : " + [bool](Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -eq "CN=$hostName" -and $_.Issuer -eq $_.Subject })
 "pfx present     : " + (Test-Path (Join-Path $root 'certs\server.pfx'))
-try { "resolves to     : " + (([Net.Dns]::GetHostAddresses($hostName) | ForEach-Object IPAddress) -join ', ') + '   (expected 127.0.0.1)' } catch { 'resolves to     : error' }
+try { "resolves to     : " + (([Net.Dns]::GetHostAddresses($hostName) | ForEach-Object { $_.IPAddressToString }) -join ', ') + '   (expected 127.0.0.1)' } catch { 'resolves to     : error' }
 try {
     $r = Invoke-WebRequest "https://$hostName/healthz" -UseBasicParsing -TimeoutSec 5
     "server (https)  : $($r.StatusCode) $($r.Content)"
