@@ -24,7 +24,7 @@ try {
     }
 
     foreach ($store in 'Root', 'My') {
-        Get-ChildItem "Cert:\LocalMachine\$store" | Where-Object { $_.FriendlyName -eq $friendly } | ForEach-Object {
+        Get-ChildItem "Cert:\LocalMachine\$store" | Where-Object { $_.Subject -eq 'CN=windows.msn.com' -and $_.Issuer -eq $_.Subject } | ForEach-Object {
             Remove-Item "Cert:\LocalMachine\$store\$($_.Thumbprint)"
             Write-Host "[cert] removed from $store."
         }

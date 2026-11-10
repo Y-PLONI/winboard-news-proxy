@@ -26,7 +26,8 @@ try {
 
     # ---- 1. certificate ----
     $pfx = Join-Path $certDir 'server.pfx'
-    $trusted = Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.FriendlyName -eq $friendly }
+    # Identify our cert by subject (a friendly name does not survive the .cer export) and self-signed issuer.
+    $trusted = Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -eq "CN=$hostName" -and $_.Issuer -eq $_.Subject }
     if ($trusted -and (Test-Path $pfx) -and (Test-Path (Join-Path $certDir 'pass.txt'))) {
         Write-Host '[cert] already installed, skipping.'
     } else {
@@ -47,14 +48,16 @@ try {
     }
 
     # ---- 2. hosts ----
-    $current = Get-Content $hostsFile -Raw
-    if ($current -match [regex]::Escape($marker)) {
+    $wanted = "127.0.0.1 $hostName $marker"
+    $lines  = @(Get-Content $hostsFile)
+    $ours   = @($lines | Where-Object { $_ -match [regex]::Escape($marker) })
+    if ($ours.Count -eq 1 -and $ours[0] -eq $wanted) {
         Write-Host '[hosts] entry already present.'
     } else {
-        Copy-Item $hostsFile "$hostsFile.winboard.bak" -Force
-        $prefix = if ($current.EndsWith("`n")) { '' } else { "`r`n" }
-        [IO.File]::AppendAllText($hostsFile, "$prefix127.0.0.1 $hostName $marker`r`n")
-        Write-Host "[hosts] added: 127.0.0.1 $hostName (backup: hosts.winboard.bak)"
+        if (-not (Test-Path "$hostsFile.winboard.bak")) { Copy-Item $hostsFile "$hostsFile.winboard.bak" -Force }
+        $kept = @($lines | Where-Object { $_ -notmatch [regex]::Escape($marker) })   # also drops a malformed older line
+        [IO.File]::WriteAllLines($hostsFile, [string[]]($kept + $wanted), (New-Object Text.UTF8Encoding($false)))
+        Write-Host "[hosts] set: $wanted"
     }
 
     ipconfig /flushdns | Out-Null
