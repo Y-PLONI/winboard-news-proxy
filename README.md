@@ -46,7 +46,7 @@ node server.js --http      # http://127.0.0.1:8443/app.html
 |---|---|
 | `server.js` | שרת HTTPS מקומי, בלי תלויות, מאזין ל-127.0.0.1 בלבד |
 | `src/news.js` | משיכת הגיזרה, נרמול טקסט, cache עם backoff |
-| `public/app.html` | עמוד החדשות (RTL, בהיר/כהה, בלי מדיה) |
+| `public/app.html` | עמוד החדשות (RTL, בהיר/כהה, חלונית מדיה בצד שמאל) |
 | `scripts/install.ps1`, `uninstall.ps1` | שינויי מערכת הפיכים (מנהל) |
 | `scripts/status.ps1` | בדיקת מצב (קריאה בלבד) |
 | `test/` | בדיקות (`node --test`) |
