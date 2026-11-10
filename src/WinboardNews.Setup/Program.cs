@@ -1,3 +1,5 @@
+[assembly: System.Runtime.Versioning.SupportedOSPlatform("windows")]
+
 namespace WinboardNews.Setup;
 
 /// <summary>
