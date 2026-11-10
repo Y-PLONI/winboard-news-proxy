@@ -6,25 +6,49 @@
 <meta name="color-scheme" content="light dark">
 <title>הגיזרה</title>
 <style>
-  :root { --bg:#f9f9f9; --fg:#1b1b1b; --dim:#6b6b6b; --line:#e3e3e3; --accent:#0f6cbd; --brk:#c42b1c; --card:#fff; }
+  :root { --bg:#f9f9f9; --fg:#1b1b1b; --dim:#6b6b6b; --line:#e3e3e3; --accent:#0f6cbd; --brk:#c42b1c; --card:#fff; --sel:#eef4fb; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#202020; --fg:#f3f3f3; --dim:#a0a0a0; --line:#333; --accent:#60cdff; --brk:#ff99a4; --card:#2b2b2b; }
+    :root { --bg:#202020; --fg:#f3f3f3; --dim:#a0a0a0; --line:#333; --accent:#60cdff; --brk:#ff99a4; --card:#2b2b2b; --sel:#26323d; }
   }
   * { box-sizing: border-box; }
-  html, body { margin:0; background:var(--bg); color:var(--fg); font:14px/20px "Segoe UI Variable Text","Segoe UI",Arial,sans-serif; }
-  header { position:sticky; top:0; z-index:1; display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--bg); border-bottom:1px solid var(--line); }
+  html, body { height:100%; margin:0; background:var(--bg); color:var(--fg); font:14px/20px "Segoe UI Variable Text","Segoe UI",Arial,sans-serif; }
+  body { display:flex; flex-direction:column; overflow:hidden; }
+  header { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--line); }
   header h1 { margin:0; font-size:16px; font-weight:600; flex:1; }
   #upd { color:var(--dim); font-size:12px; }
+  .stale { color:var(--brk); }
   button { font:inherit; color:var(--fg); background:var(--card); border:1px solid var(--line); border-radius:6px; padding:3px 10px; cursor:pointer; }
   button:hover { border-color:var(--accent); }
-  main { padding:0 14px 16px; }
+
+  /* RTL flex row: the list is the first child (right side), the media panel opens on the left. */
+  #body { flex:1; min-height:0; display:flex; position:relative; }
+  #list { flex:1 1 0; min-width:0; overflow-y:auto; padding:0 14px 16px; }
+  #panel { flex:0 0 46%; min-width:320px; display:flex; flex-direction:column; border-inline-start:1px solid var(--line); background:var(--bg); }
+  #panel[hidden] { display:none; }
+  .ph { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line); }
+  .ph .pt { flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ph a { color:var(--accent); font-size:12px; text-decoration:none; }
+  #pmedia { flex:1; min-height:0; overflow:auto; padding:12px; display:flex; flex-direction:column; gap:12px; align-items:center; }
+  #pmedia img, #pmedia video { display:block; max-width:100%; height:auto; border-radius:6px; background:var(--card); }
+  #pmedia video { max-height:100%; }
+  #pmedia audio { width:100%; }
+  @media (max-width: 700px) {
+    #panel { position:absolute; inset:0; flex:none; min-width:0; z-index:2; border:0; }
+  }
+
   article { padding:10px 0; border-bottom:1px solid var(--line); }
   article a { color:inherit; text-decoration:none; display:block; }
-  .meta { color:var(--dim); font-size:12px; display:flex; gap:8px; align-items:center; }
+  article.has-media { cursor:pointer; margin:0 -8px; padding:10px 8px; border-radius:6px; }
+  article.has-media:hover { background:var(--card); }
+  article.has-media:focus-visible { outline:2px solid var(--accent); }
+  article.sel, article.sel:hover { background:var(--sel); }
+  .meta { color:var(--dim); font-size:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .brk { color:var(--brk); font-weight:600; }
+  .chip { color:var(--accent); }
   .t { font-weight:600; margin-top:2px; }
   .b { margin-top:2px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-  .stale { color:var(--brk); }
+  /* the first ~10 pixel rows of the first image: a thin visual hint that the item has a picture */
+  .strip { display:block; width:100%; height:10px; object-fit:cover; object-position:top; border-radius:3px; margin-top:6px; background:var(--line); }
   #empty { color:var(--dim); padding:24px 0; text-align:center; }
 </style>
 </head>
@@ -34,7 +58,17 @@
   <span id="upd"></span>
   <button id="refresh" type="button" title="רענון">רענון</button>
 </header>
-<main id="list"><div id="empty">טוען...</div></main>
+<div id="body">
+  <main id="list"><div id="empty">טוען...</div></main>
+  <aside id="panel" hidden>
+    <div class="ph">
+      <span class="pt" id="ptitle"></span>
+      <a href="https://hagizra.news/" target="_blank" rel="noopener">לאתר</a>
+      <button id="pclose" type="button" title="סגירה (Esc)">סגור</button>
+    </div>
+    <div id="pmedia"></div>
+  </aside>
+</div>
 
 <script>
 (function () {
@@ -42,9 +76,14 @@
   var SITE = 'https://hagizra.news/';
   var list = document.getElementById('list');
   var upd = document.getElementById('upd');
+  var panel = document.getElementById('panel');
+  var pmedia = document.getElementById('pmedia');
+  var ptitle = document.getElementById('ptitle');
   var timeFmt = new Intl.DateTimeFormat('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' });
   var dayFmt = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric', timeZone: 'Asia/Jerusalem' });
-  var MEDIA = { image: 'תמונה', video: 'וידאו', audio: 'אודיו' };
+  var LABEL = { image: ['תמונה', 'תמונות'], video: ['וידאו', 'סרטונים'], audio: ['אודיו', 'הקלטות'] };
+  var ICON = { image: '', video: '▶ ', audio: '♪ ' };
+  var selectedId = null;
 
   function diag(extra) {
     try {
@@ -62,27 +101,100 @@
 
   function when(ms) {
     var d = new Date(ms), today = new Date();
-    var same = dayFmt.format(d) === dayFmt.format(today);
-    return same ? timeFmt.format(d) : dayFmt.format(d) + ' ' + timeFmt.format(d);
+    return dayFmt.format(d) === dayFmt.format(today) ? timeFmt.format(d) : dayFmt.format(d) + ' ' + timeFmt.format(d);
   }
 
+  function playable(it) { return it.media.filter(function (m) { return m.url; }); }
+
+  function chips(it) {
+    var counts = {}, order = [];
+    it.media.forEach(function (m) { if (!counts[m.kind]) { counts[m.kind] = 0; order.push(m.kind); } counts[m.kind]++; });
+    return order.map(function (k) {
+      var l = LABEL[k] || [k, k], n = counts[k];
+      var s = document.createElement('span'); s.className = 'chip';
+      s.textContent = (ICON[k] || '') + (n > 1 ? n + ' ' + l[1] : l[0]);
+      return s;
+    });
+  }
+
+  // ---- side panel (opens on the left; the news list stays on the right) ----
+  function closePanel() {
+    panel.hidden = true;
+    pmedia.textContent = '';          // removing the elements also stops any playing video/audio
+    selectedId = null;
+    markSelected();
+  }
+
+  function markSelected() {
+    var arts = list.querySelectorAll('article[data-id]');
+    for (var i = 0; i < arts.length; i++) arts[i].classList.toggle('sel', arts[i].dataset.id === String(selectedId));
+  }
+
+  function openPanel(it) {
+    pmedia.textContent = '';
+    ptitle.textContent = it.title || it.body.slice(0, 60);
+    playable(it).forEach(function (m) {
+      var el;
+      if (m.kind === 'video') {
+        el = document.createElement('video'); el.controls = true; el.preload = 'metadata'; el.playsInline = true;
+      } else if (m.kind === 'audio') {
+        el = document.createElement('audio'); el.controls = true; el.preload = 'none';
+      } else {
+        el = document.createElement('img'); el.alt = ''; el.decoding = 'async';
+      }
+      if (m.w && m.h && m.kind !== 'audio') { el.setAttribute('width', m.w); el.setAttribute('height', m.h); }
+      el.addEventListener('error', function () {
+        var n = document.createElement('div'); n.className = 'meta'; n.textContent = 'לא ניתן לטעון את הקובץ'; el.replaceWith(n);
+        diag({ mediaError: m.url });
+      });
+      el.src = m.url;
+      pmedia.appendChild(el);
+    });
+    panel.hidden = false;
+    pmedia.scrollTop = 0;
+    selectedId = it.id;
+    markSelected();
+  }
+
+  function toggle(it) { if (selectedId === it.id && !panel.hidden) closePanel(); else openPanel(it); }
+
+  // ---- list ----
   function render(data) {
+    var scroll = list.scrollTop;
     list.textContent = '';
     if (!data.items.length) {
       var e = document.createElement('div'); e.id = 'empty'; e.textContent = 'אין חדשות להצגה כרגע'; list.appendChild(e);
     }
     data.items.forEach(function (it) {
       var art = document.createElement('article');
-      var a = document.createElement('a'); a.href = SITE; a.target = '_blank'; a.rel = 'noopener';
+      art.dataset.id = it.id;
+      var pm = playable(it);
+      var box;
+      if (pm.length) {
+        art.className = 'has-media'; art.tabIndex = 0; art.setAttribute('role', 'button');
+        art.addEventListener('click', function () { toggle(it); });
+        art.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(it); } });
+        box = art;
+      } else {
+        box = document.createElement('a'); box.href = SITE; box.target = '_blank'; box.rel = 'noopener'; art.appendChild(box);
+      }
       var meta = document.createElement('div'); meta.className = 'meta';
       var tm = document.createElement('span'); tm.textContent = when(it.time); meta.appendChild(tm);
       if (it.breaking) { var br = document.createElement('span'); br.className = 'brk'; br.textContent = 'מבזק'; meta.appendChild(br); }
-      it.media.forEach(function (m) { var s = document.createElement('span'); s.textContent = MEDIA[m] || m; meta.appendChild(s); });
-      a.appendChild(meta);
-      if (it.title) { var t = document.createElement('div'); t.className = 't'; t.textContent = it.title; a.appendChild(t); }
-      if (it.body) { var b = document.createElement('div'); b.className = 'b'; b.textContent = it.body; a.appendChild(b); }
-      art.appendChild(a); list.appendChild(art);
+      chips(it).forEach(function (c) { meta.appendChild(c); });
+      box.appendChild(meta);
+      if (it.title) { var t = document.createElement('div'); t.className = 't'; t.textContent = it.title; box.appendChild(t); }
+      if (it.body) { var b = document.createElement('div'); b.className = 'b'; b.textContent = it.body; box.appendChild(b); }
+      var first = pm.filter(function (m) { return m.kind === 'image'; })[0];
+      if (first) {
+        var s = document.createElement('img'); s.className = 'strip'; s.alt = ''; s.loading = 'lazy'; s.decoding = 'async';
+        s.addEventListener('error', function () { s.remove(); });
+        s.src = first.url; box.appendChild(s);
+      }
+      list.appendChild(art);
     });
+    list.scrollTop = scroll;
+    markSelected();
     upd.className = data.stale ? 'stale' : '';
     upd.textContent = (data.stale ? 'לא עדכני · ' : 'עודכן ') + (data.fetchedAt ? timeFmt.format(new Date(data.fetchedAt)) : '');
   }
@@ -98,6 +210,8 @@
   }
 
   document.getElementById('refresh').addEventListener('click', load);
+  document.getElementById('pclose').addEventListener('click', closePanel);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) closePanel(); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
   setInterval(function () { if (!document.hidden) load(); }, 60000);
   load();

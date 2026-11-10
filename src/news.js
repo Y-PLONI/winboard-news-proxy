@@ -5,8 +5,10 @@ const API = 'https://hagizra.news/api/messages';
 const SITE = 'https://hagizra.news/';
 const EDGE = /^[ ‎‏‪-‮⁦-⁩]+|[ ‎‏‪-‮⁦-⁩]+$/g;
 
-const EMBEDDED = /\[(image|video|audio)-embedded#\]\([^)]*\)/gi;
-const MD_IMAGE = /!\[[^\]]*\]\([^)]*\)/g;
+const EMBEDDED = /\[(image|video|audio)-embedded#\]\(([^)]*)\)/gi;
+const MD_IMAGE = /!\[[^\]]*\]\(([^)]*)\)/g;
+// Media is played/shown directly from these hosts by the page; anything else is only labelled, never loaded.
+const MEDIA_HOSTS = new Set(['stream.hagizra.news', 'hagizra.news']);
 const LINK = /\[([^\]]*)\]\([^)]*\)/g;
 const TAG = /<\/?[a-zA-Z][^>]{0,200}>/g;
 const TITLE = /^[\s‎‏]*\*{2,}([^*]+?)\*{2,}/;
@@ -27,13 +29,28 @@ function clean(s) {
   return s.replace(/\*/g, '').replace(/_/g, ' ').replace(/\s+/g, ' ').replace(EDGE, '');
 }
 
-/** Raw markdown/HTML mix -> { title, body, media[] } (plain text only; never HTML). */
+/**
+ * "https://host/x.mp4#464x848" -> { kind, url, w, h }.
+ * url is '' unless it is https on a Hagizra host (relative paths resolve against the site).
+ */
+function mediaRef(kind, ref) {
+  const [rawUrl, frag = ''] = String(ref).trim().split('#');
+  let url = '';
+  try {
+    const u = new URL(rawUrl, SITE);
+    if (u.protocol === 'https:' && !u.username && !u.password && MEDIA_HOSTS.has(u.hostname)) url = u.href;
+  } catch { /* leave url empty */ }
+  const d = /(\d+)x(\d+)/.exec(frag);
+  return { kind, url, w: d ? Number(d[1]) : 0, h: d ? Number(d[2]) : 0 };
+}
+
+/** Raw markdown/HTML mix -> { title, body, media[] } where media is [{ kind, url, w, h }] (plain text only; never HTML). */
 function normalize(raw) {
   if (!raw) return { title: '', body: '', media: [] };
-  const media = new Set();
+  const media = [];
 
-  let text = raw.replace(EMBEDDED, (_, kind) => { media.add(kind.toLowerCase()); return ' '; });
-  text = text.replace(MD_IMAGE, () => { media.add('image'); return ' '; });
+  let text = raw.replace(EMBEDDED, (_, kind, ref) => { media.push(mediaRef(kind.toLowerCase(), ref)); return ' '; });
+  text = text.replace(MD_IMAGE, (_, ref) => { media.push(mediaRef('image', ref)); return ' '; });
   text = text.replace(LINK, '$1');
   text = htmlDecode(text.replace(TAG, ''));
 
@@ -43,7 +60,7 @@ function normalize(raw) {
     title = clean(m[1].replace(/\|+$/, ''));
     text = text.slice(m[0].length);
   }
-  return { title, body: clean(text), media: [...media] };
+  return { title, body: clean(text), media };
 }
 
 /** Accepts a bare array or { messages: [...] }; unknown fields are ignored. */

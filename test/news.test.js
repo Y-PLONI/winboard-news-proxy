@@ -7,14 +7,32 @@ test('normalize: title, body and media markers', () => {
   const r = normalize('**שמחת בית צאנז |** צילום משה גולדשטיין.\n[image-embedded#](https://stream.hagizra.news/x.jpg#1280x723:)');
   assert.equal(r.title, 'שמחת בית צאנז');
   assert.equal(r.body, 'צילום משה גולדשטיין.');
-  assert.deepEqual(r.media, ['image']);
+  assert.deepEqual(r.media, [{ kind: 'image', url: 'https://stream.hagizra.news/x.jpg', w: 1280, h: 723 }]);
+});
+
+test('normalize: video, audio, relative and foreign-host media', () => {
+  const r = normalize([
+    '**כותרת |** טקסט',
+    '[video-embedded#](https://stream.hagizra.news/a/v.mp4#464x848)',
+    '[audio-embedded#](https://stream.hagizra.news/b/a.mp3)',
+    '[image-embedded#](/api/files/abc)',
+    '[image-embedded#](https://evil.example/x.jpg#10x10)',
+    '[image-embedded#](http://stream.hagizra.news/plain.jpg)',
+    '[image-embedded#](https://user:pw@stream.hagizra.news/c.jpg)',
+  ].join('\n'));
+  assert.equal(r.body, 'טקסט');
+  assert.deepEqual(r.media.map((m) => m.kind), ['video', 'audio', 'image', 'image', 'image', 'image']);
+  assert.deepEqual(r.media[0], { kind: 'video', url: 'https://stream.hagizra.news/a/v.mp4', w: 464, h: 848 });
+  assert.deepEqual(r.media[1], { kind: 'audio', url: 'https://stream.hagizra.news/b/a.mp3', w: 0, h: 0 });
+  assert.equal(r.media[2].url, 'https://hagizra.news/api/files/abc');
+  assert.deepEqual(r.media.slice(3).map((m) => m.url), ['', '', ''], 'foreign host, http and credentials are labelled but never loaded');
 });
 
 test('normalize: strips html, links and decodes entities', () => {
   const r = normalize('**כותרת**<b>גוף</b> &amp; [קישור](https://x.y) ![](a.png)');
   assert.equal(r.title, 'כותרת');
   assert.equal(r.body, 'גוף & קישור');
-  assert.deepEqual(r.media, ['image']);
+  assert.deepEqual(r.media.map((m) => m.kind), ['image']);
 });
 
 test('normalize: never lets html through', () => {
