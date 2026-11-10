@@ -1,0 +1,12 @@
+{
+  "name": "winboard-news-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local replacement for the Windows 11 Widgets 'Discover' board shell (windows.msn.com), showing Hagizra news.",
+  "scripts": {
+    "start": "node server.js",
+    "start:http": "node server.js --http",
+    "test": "node --test test/"
+  },
+  "engines": { "node": ">=20" }
+}

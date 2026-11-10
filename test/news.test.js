@@ -1,0 +1,70 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { normalize, parse, NewsService } = require('../src/news');
+
+test('normalize: title, body and media markers', () => {
+  const r = normalize('**שמחת בית צאנז |** צילום משה גולדשטיין.\n[image-embedded#](https://stream.hagizra.news/x.jpg#1280x723:)');
+  assert.equal(r.title, 'שמחת בית צאנז');
+  assert.equal(r.body, 'צילום משה גולדשטיין.');
+  assert.deepEqual(r.media, ['image']);
+});
+
+test('normalize: strips html, links and decodes entities', () => {
+  const r = normalize('**כותרת**<b>גוף</b> &amp; [קישור](https://x.y) ![](a.png)');
+  assert.equal(r.title, 'כותרת');
+  assert.equal(r.body, 'גוף & קישור');
+  assert.deepEqual(r.media, ['image']);
+});
+
+test('normalize: never lets html through', () => {
+  const r = normalize('<script>alert(1)</script>טקסט');
+  assert.ok(!r.body.includes('<'));
+});
+
+test('parse: bare array and {messages}, skips deleted/ads, sorts newest first', () => {
+  const msgs = [
+    { id: 1, text: 'ישן', timestamp: '2026-11-10T10:00:00Z' },
+    { id: 2, text: 'חדש', timestamp: '2026-11-10T11:00:00Z', breakingId: 5 },
+    { id: 3, text: 'נמחק', deleted: true, timestamp: '2026-11-10T12:00:00Z' },
+    { id: 4, text: 'פרסומת', is_ads: true, timestamp: '2026-11-10T12:00:00Z' },
+    { id: 'x', text: 'בלי מזהה' },
+  ];
+  for (const root of [msgs, { messages: msgs }]) {
+    const items = parse(root);
+    assert.deepEqual(items.map((i) => i.id), [2, 1]);
+    assert.equal(items[0].breaking, true);
+  }
+  assert.throws(() => parse({ nope: 1 }));
+});
+
+test('NewsService: caches, dedupes in-flight, serves stale with backoff on failure', async () => {
+  let calls = 0;
+  let fail = false;
+  let now = 1_000_000;
+  const fetchImpl = async () => {
+    calls++;
+    if (fail) throw new Error('down');
+    return { ok: true, json: async () => [{ id: 1, text: 'א', timestamp: '2026-11-10T10:00:00Z' }] };
+  };
+  const svc = new NewsService({ fetchImpl, now: () => now, ttlMs: 45_000 });
+
+  const [a, b] = await Promise.all([svc.get(), svc.get()]);
+  assert.equal(calls, 1);
+  assert.equal(a.items.length, 1);
+  assert.equal(b.stale, false);
+
+  now += 10_000; await svc.get();
+  assert.equal(calls, 1, 'fresh cache is reused');
+
+  fail = true; now += 60_000;
+  const s = await svc.get();
+  assert.equal(calls, 2);
+  assert.equal(s.stale, true);
+  assert.equal(s.items.length, 1, 'stale items are kept');
+
+  now += 5_000; await svc.get();
+  assert.equal(calls, 2, 'backoff suppresses retry');
+  now += 30_000; await svc.get();
+  assert.equal(calls, 3);
+});

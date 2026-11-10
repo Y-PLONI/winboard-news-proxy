@@ -1,0 +1,6 @@
+node_modules/
+certs/
+logs/
+*.pfx
+*.cer
+*.bak
