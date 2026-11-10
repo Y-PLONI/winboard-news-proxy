@@ -84,6 +84,8 @@
   var LABEL = { image: ['תמונה', 'תמונות'], video: ['וידאו', 'סרטונים'], audio: ['אודיו', 'הקלטות'] };
   var ICON = { image: '', video: '▶ ', audio: '♪ ' };
   var selectedId = null;
+  var VERSION = '__VERSION__';              // filled in by server.js; stays '__VERSION__' if served statically
+  var versioned = VERSION.charAt(0) !== '_';
 
   function diag(extra) {
     try {
@@ -200,16 +202,19 @@
   }
 
   var busy = false;
-  function load() {
+  function load(manual) {
     if (busy) return; busy = true;
-    fetch('/news.json', { cache: 'no-store' })
+    fetch(manual === true ? '/news.json?fresh=1' : '/news.json', { cache: 'no-store' })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(render)
+      .then(function (d) {
+        if (versioned && d.v && d.v !== VERSION) { location.reload(); return; }   // page was updated on the server
+        render(d);
+      })
       .catch(function (e) { upd.className = 'stale'; upd.textContent = 'שגיאת טעינה'; diag({ loadError: String(e) }); })
       .then(function () { busy = false; });
   }
 
-  document.getElementById('refresh').addEventListener('click', load);
+  document.getElementById('refresh').addEventListener('click', function () { load(true); });
   document.getElementById('pclose').addEventListener('click', closePanel);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) closePanel(); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });

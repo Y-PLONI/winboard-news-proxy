@@ -112,9 +112,10 @@ class NewsService {
     this.lastError = null;
   }
 
-  async get() {
+  /** maxAgeMs lets a manual refresh accept a younger cache than the default ttl (failure backoff still applies). */
+  async get(maxAgeMs = this.ttlMs) {
     const t = this.now();
-    const fresh = this.fetchedAt && t - this.fetchedAt < this.ttlMs;
+    const fresh = this.fetchedAt && t - this.fetchedAt < maxAgeMs;
     if (!fresh && t >= this.retryAt) {
       this.inflight ??= this.#refresh().finally(() => { this.inflight = null; });
       await this.inflight;

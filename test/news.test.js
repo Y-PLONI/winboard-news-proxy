@@ -86,3 +86,19 @@ test('NewsService: caches, dedupes in-flight, serves stale with backoff on failu
   now += 30_000; await svc.get();
   assert.equal(calls, 3);
 });
+
+test('NewsService: manual refresh accepts a younger cache than the default ttl', async () => {
+  let calls = 0;
+  let now = 5_000_000;
+  const fetchImpl = async () => { calls++; return { ok: true, json: async () => [{ id: calls, text: 'א', timestamp: '2026-11-10T10:00:00Z' }] }; };
+  const svc = new NewsService({ fetchImpl, now: () => now, ttlMs: 45_000 });
+  await svc.get();
+  now += 20_000;
+  await svc.get();
+  assert.equal(calls, 1, 'default ttl still caches');
+  await svc.get(5_000);
+  assert.equal(calls, 2, 'manual refresh refetches after 20s');
+  now += 2_000;
+  await svc.get(5_000);
+  assert.equal(calls, 2, 'but not within 5s');
+});

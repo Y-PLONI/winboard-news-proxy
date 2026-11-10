@@ -33,6 +33,12 @@ function log(entry) {
 
 const news = new NewsService();
 
+// Changes whenever public/app.html is edited. The page compares it with the version it was served with
+// and reloads itself, so a board that keeps the old page in memory picks up updates without a restart.
+function pageVersion() {
+  try { return String(Math.round(fs.statSync(PAGE).mtimeMs)); } catch { return '0'; }
+}
+
 function send(res, status, type, body, extra = {}) {
   res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...extra });
   res.end(body);
@@ -57,7 +63,9 @@ async function handler(req, res) {
   if (p === '/healthz') return send(res, 200, 'text/plain; charset=utf-8', 'ok');
 
   if (p === '/news.json' && req.method === 'GET') {
-    return send(res, 200, 'application/json; charset=utf-8', JSON.stringify(await news.get()));
+    // ?fresh=1 is the manual refresh button: accept at most 5s old data instead of the default 45s.
+    const data = await news.get(url.searchParams.get('fresh') === '1' ? 5_000 : undefined);
+    return send(res, 200, 'application/json; charset=utf-8', JSON.stringify({ ...data, v: pageVersion() }));
   }
 
   if (p === '/diag' && req.method === 'POST') {
@@ -67,7 +75,7 @@ async function handler(req, res) {
 
   const wantsHtml = (h.accept || '').includes('text/html');
   if (req.method === 'GET' && (p === '/' || p === '/app.html' || (wantsHtml && !path.extname(p)))) {
-    return send(res, 200, 'text/html; charset=utf-8', fs.readFileSync(PAGE));
+    return send(res, 200, 'text/html; charset=utf-8', fs.readFileSync(PAGE, 'utf8').replace('__VERSION__', pageVersion()));
   }
 
   return send(res, 404, 'text/plain; charset=utf-8', 'not found');
