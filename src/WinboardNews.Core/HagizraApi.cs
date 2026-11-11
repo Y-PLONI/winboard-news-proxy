@@ -59,7 +59,7 @@ public static class HagizraApi
             if (GetBool(m, "deleted") || GetBool(m, "is_ads"))
                 continue;
 
-            var (title, body, media) = NewsNormalizer.Normalize(GetString(m, "text"));
+            var (title, body, media, quote) = NewsNormalizer.Normalize(GetString(m, "text"));
             if (title.Length == 0 && body.Length == 0 && media.Count == 0)
                 continue;
 
@@ -69,7 +69,8 @@ public static class HagizraApi
                 title,
                 body,
                 media,
-                Breaking: m.TryGetProperty("breakingId", out var b) && b.ValueKind == JsonValueKind.Number && b.TryGetInt64(out long bid) && bid > 0));
+                Breaking: m.TryGetProperty("breakingId", out var b) && b.ValueKind == JsonValueKind.Number && b.TryGetInt64(out long bid) && bid > 0,
+                Quote: quote));
         }
 
         items.Sort((a, b) => a.Time != b.Time ? b.Time.CompareTo(a.Time) : b.Id.CompareTo(a.Id));

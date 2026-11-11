@@ -268,6 +268,14 @@ public static class NewsJson
                 w.WriteString("title", item.Title);
                 w.WriteString("body", item.Body);
                 w.WriteBoolean("breaking", item.Breaking);
+                if (item.Quote is { } q)
+                {
+                    w.WriteStartObject("quote");
+                    w.WriteNumber("id", q.Id);
+                    w.WriteString("title", q.Title);
+                    w.WriteString("body", q.Body);
+                    w.WriteEndObject();
+                }
                 w.WriteStartArray("media");
                 foreach (var m in item.Media)
                 {

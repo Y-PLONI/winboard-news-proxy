@@ -44,6 +44,24 @@ public class NormalizerTests
     }
 
     [Fact]
+    public void Reply_keeps_the_quoted_flash_apart_from_the_message()
+    {
+        var r = NewsNormalizer.Normalize(
+            "[quote-embedded#](2313598@**החוצפה של הצבא |** יעקב פרבר (בצה\"ל) הגדירו אותו כעריק...)\n\n**קצת מביך |** למרות כל הסערה...");
+        Assert.Equal("קצת מביך", r.Title);
+        Assert.Equal("למרות כל הסערה...", r.Body);
+        Assert.Equal(new QuoteRef(2313598, "החוצפה של הצבא", "יעקב פרבר (בצה\"ל) הגדירו אותו כעריק..."), r.Quote);
+        Assert.DoesNotContain("quote", r.Title + r.Body);
+    }
+
+    [Fact]
+    public void Reply_without_an_id_and_plain_message_have_sane_quotes()
+    {
+        Assert.Equal(0, NewsNormalizer.Normalize("[quote-embedded#](טקסט מצוטט)\nתגובה").Quote!.Id);
+        Assert.Null(NewsNormalizer.Normalize("**כותרת |** גוף").Quote);
+    }
+
+    [Fact]
     public void Never_lets_html_through()
     {
         Assert.DoesNotContain('<', NewsNormalizer.Normalize("<script>alert(1)</script>טקסט").Body);

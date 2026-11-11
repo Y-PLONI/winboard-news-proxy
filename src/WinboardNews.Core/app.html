@@ -28,6 +28,17 @@
   .ph { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--line); }
   .ph .pt { flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .ph a { color:var(--accent); font-size:12px; text-decoration:none; }
+  /* the whole message above the media; scrolls by itself when long so the media keeps most of the panel */
+  #ptext { flex:none; max-height:38%; overflow-y:auto; padding:10px 14px; border-bottom:1px solid var(--line); }
+  #ptext:empty { display:none; }
+  #ptext .t { margin:0 0 4px; }
+  #ptext .b { display:block; -webkit-line-clamp:unset; overflow:visible; white-space:pre-line; }
+  #panel.max #ptext { display:none; }
+  /* a reply: the quoted flash sits above the message, set apart on the start (right) side */
+  .q { margin:4px 0 6px; padding:4px 10px; border-inline-start:3px solid var(--accent); border-radius:3px; background:var(--card); color:var(--dim); font-size:12.5px; }
+  .q .qt { font-weight:600; }
+  .q .qb { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  #ptext .q .qb { display:block; -webkit-line-clamp:unset; overflow:visible; }
   #pmedia { flex:1; min-height:0; overflow:auto; padding:12px; display:flex; flex-direction:column; gap:12px; align-items:center; }
   #pmedia img, #pmedia video { display:block; max-width:100%; height:auto; border-radius:6px; background:var(--card); }
   #pmedia video { max-height:100%; }
@@ -35,6 +46,15 @@
   @media (max-width: 700px) {
     #panel { position:absolute; inset:0; flex:none; min-width:0; z-index:2; border:0; }
   }
+  /* expanded mode: the panel covers the whole board (list included); media is scaled to fit the viewport.
+     Only classes change, so a playing video keeps its position and state. */
+  #panel.max { position:fixed; inset:0; z-index:10; flex:none; min-width:0; width:auto; border:0; }
+  #panel.max #pmedia { padding:12px; }
+  #panel.max #pmedia img, #panel.max #pmedia video { flex:none; width:100%; max-width:none; height:calc(100vh - 70px); max-height:none; object-fit:contain; border-radius:0; }
+  #pfs { display:none; }
+  #panel.max #pfs.ok { display:inline-block; }
+  #pmedia img, #pmedia video { cursor:zoom-in; }
+  #panel.max #pmedia img, #panel.max #pmedia video { cursor:zoom-out; }
 
   article { padding:10px 0; border-bottom:1px solid var(--line); }
   article a { color:inherit; text-decoration:none; display:block; }
@@ -65,8 +85,11 @@
     <div class="ph">
       <span class="pt" id="ptitle"></span>
       <a href="https://hagizra.news/" target="_blank" rel="noopener">לאתר</a>
+      <button id="pfs" type="button" title="מסך מלא של המכשיר">מסך מלא</button>
+      <button id="pmax" type="button" title="הגדלה לכל הלוח" aria-pressed="false">הגדל</button>
       <button id="pclose" type="button" title="סגירה (Esc)">סגור</button>
     </div>
+    <div id="ptext"></div>
     <div id="pmedia"></div>
   </aside>
 </div>
@@ -80,6 +103,7 @@
   var panel = document.getElementById('panel');
   var pmedia = document.getElementById('pmedia');
   var ptitle = document.getElementById('ptitle');
+  var ptext = document.getElementById('ptext');
   var timeFmt = new Intl.DateTimeFormat('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' });
   var dayFmt = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric', timeZone: 'Asia/Jerusalem' });
   var LABEL = { image: ['תמונה', 'תמונות'], video: ['וידאו', 'סרטונים'], audio: ['אודיו', 'הקלטות'] };
@@ -121,8 +145,27 @@
   }
 
   // ---- side panel (opens on the left; the news list stays on the right) ----
+  var pmax = document.getElementById('pmax');
+  var pfs = document.getElementById('pfs');
+  if (document.fullscreenEnabled) pfs.className = 'ok';
+
+  function setMax(on) {
+    on = !!on;
+    panel.classList.toggle('max', on);
+    pmax.textContent = on ? 'הקטן' : 'הגדל';
+    pmax.title = on ? 'הקטנה חזרה לפאנל' : 'הגדלה לכל הלוח';
+    pmax.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (!on) leaveFullscreen();
+  }
+  function toggleMax() { setMax(!panel.classList.contains('max')); }
+  function leaveFullscreen() {
+    try { if (document.fullscreenElement) { var p = document.exitFullscreen(); if (p && p.catch) p.catch(function () {}); } } catch (e) {}
+  }
+
   function closePanel() {
+    setMax(false);
     panel.hidden = true;
+    ptext.textContent = '';
     pmedia.textContent = '';          // removing the elements also stops any playing video/audio
     selectedId = null;
     markSelected();
@@ -133,9 +176,21 @@
     for (var i = 0; i < arts.length; i++) arts[i].classList.toggle('sel', arts[i].dataset.id === String(selectedId));
   }
 
+  function quoteEl(q) {
+    var el = document.createElement('div'); el.className = 'q';
+    if (q.title) { var t = document.createElement('div'); t.className = 'qt'; t.textContent = q.title; el.appendChild(t); }
+    if (q.body) { var b = document.createElement('div'); b.className = 'qb'; b.textContent = q.body; el.appendChild(b); }
+    return el;
+  }
+
   function openPanel(it) {
     pmedia.textContent = '';
     ptitle.textContent = it.title || it.body.slice(0, 60);
+    ptext.textContent = '';
+    if (it.quote) ptext.appendChild(quoteEl(it.quote));
+    if (it.title) { var pt = document.createElement('div'); pt.className = 't'; pt.textContent = it.title; ptext.appendChild(pt); }
+    if (it.body) { var pb = document.createElement('div'); pb.className = 'b'; pb.textContent = it.body; ptext.appendChild(pb); }
+    ptext.scrollTop = 0;
     playable(it).forEach(function (m) {
       var el;
       if (m.kind === 'video') {
@@ -186,6 +241,7 @@
     if (it.breaking) { var br = document.createElement('span'); br.className = 'brk'; br.textContent = 'מבזק'; meta.appendChild(br); }
     chips(it).forEach(function (c) { meta.appendChild(c); });
     box.appendChild(meta);
+    if (it.quote) box.appendChild(quoteEl(it.quote));
     if (it.title) { var t = document.createElement('div'); t.className = 't'; t.textContent = it.title; box.appendChild(t); }
     if (it.body) { var b = document.createElement('div'); b.className = 'b'; b.textContent = it.body; box.appendChild(b); }
     var first = pm.filter(function (m) { return m.kind === 'image'; })[0];
@@ -284,7 +340,18 @@
   setInterval(function () { if (!document.hidden) fillIfShort(); }, 1500);   // safety net when a scroll event is missed
   document.getElementById('refresh').addEventListener('click', function () { load(true); });
   document.getElementById('pclose').addEventListener('click', closePanel);
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) closePanel(); });
+  pmax.addEventListener('click', toggleMax);
+  pfs.addEventListener('click', function () {
+    try { var p = panel.requestFullscreen(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+  });
+  pmedia.addEventListener('dblclick', function (e) {
+    var t = e.target && e.target.tagName;
+    if (t === 'IMG' || t === 'VIDEO') { e.preventDefault(); toggleMax(); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || panel.hidden) return;
+    if (panel.classList.contains('max')) setMax(false); else closePanel();
+  });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
   setInterval(function () { if (!document.hidden) load(); }, 60000);
   load();

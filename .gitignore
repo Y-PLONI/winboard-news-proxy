@@ -7,3 +7,4 @@ TestResults/
 *.pfx
 *.cer
 *.bak
+.claude/worktrees/

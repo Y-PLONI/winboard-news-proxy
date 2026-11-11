@@ -38,13 +38,29 @@ public static partial class NewsNormalizer
         ' ', '‎', '‏', '‪', '‫', '‬', '‭', '‮', '⁦', '⁧', '⁨', '⁩',
     };
 
-    public static (string Title, string Body, List<MediaRef> Media) Normalize(string? raw)
+    // A reply: "[quote-embedded#](<id>@<quoted text, usually cut with ...>)" on its own line, then the reply text.
+    // The quoted text is not guaranteed to be free of ")", so the match ends at a ")" that closes the line.
+    [GeneratedRegex(@"\[quote-embedded#\]\((?:(?<id>\d+)@)?(?<t>[^\r\n]*?)\)[ \t]*(?=\r?\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+    private static partial Regex QuoteRegex();
+
+    public static (string Title, string Body, List<MediaRef> Media, QuoteRef? Quote) Normalize(string? raw)
     {
         var media = new List<MediaRef>();
         if (string.IsNullOrEmpty(raw))
-            return ("", "", media);
+            return ("", "", media, null);
 
-        string text = EmbeddedRegex().Replace(raw, m =>
+        QuoteRef? quote = null;
+        string source = raw;
+        var q = QuoteRegex().Match(source);
+        if (q.Success)
+        {
+            var (qTitle, qBody) = SplitTitle(StripMarkup(q.Groups["t"].Value));
+            long.TryParse(q.Groups["id"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out long qid);
+            quote = new QuoteRef(qid, qTitle, qBody);
+            source = source.Remove(q.Index, q.Length);
+        }
+
+        string text = EmbeddedRegex().Replace(source, m =>
         {
             media.Add(MakeRef(m.Groups[1].Value.ToLowerInvariant(), m.Groups[2].Value));
             return " ";
@@ -54,9 +70,19 @@ public static partial class NewsNormalizer
             media.Add(MakeRef("image", m.Groups[1].Value));
             return " ";
         });
-        text = LinkRegex().Replace(text, "$1");
-        text = WebUtility.HtmlDecode(TagRegex().Replace(text, ""));
 
+        var (title, body) = SplitTitle(StripMarkup(text));
+        return (title, body, media, quote);
+    }
+
+    private static string StripMarkup(string text)
+    {
+        text = LinkRegex().Replace(text, "$1");
+        return WebUtility.HtmlDecode(TagRegex().Replace(text, ""));
+    }
+
+    private static (string Title, string Body) SplitTitle(string text)
+    {
         string title = "";
         var match = TitleRegex().Match(text);
         if (match.Success)
@@ -64,8 +90,7 @@ public static partial class NewsNormalizer
             title = Clean(match.Groups["t"].Value.TrimEnd('|'));
             text = text[match.Length..];
         }
-
-        return (title, Clean(text), media);
+        return (title, Clean(text));
     }
 
     /// <summary>"https://host/x.mp4#464x848" becomes a MediaRef; Url stays empty when the host/scheme is not allowed.</summary>
