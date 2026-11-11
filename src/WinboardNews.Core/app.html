@@ -102,7 +102,6 @@
   var upd = document.getElementById('upd');
   var panel = document.getElementById('panel');
   var pmedia = document.getElementById('pmedia');
-  var ptitle = document.getElementById('ptitle');
   var ptext = document.getElementById('ptext');
   var timeFmt = new Intl.DateTimeFormat('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' });
   var dayFmt = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric', timeZone: 'Asia/Jerusalem' });
@@ -185,7 +184,6 @@
 
   function openPanel(it) {
     pmedia.textContent = '';
-    ptitle.textContent = it.title || it.body.slice(0, 60);
     ptext.textContent = '';
     if (it.quote) ptext.appendChild(quoteEl(it.quote));
     if (it.title) { var pt = document.createElement('div'); pt.className = 't'; pt.textContent = it.title; ptext.appendChild(pt); }
